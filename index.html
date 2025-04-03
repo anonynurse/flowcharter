@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flowchart Designer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gojs/2.3.12/go.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.2.4/fabric.min.js"></script>
     <style>
         html, body {
             height: 100%;
@@ -15,6 +15,11 @@
         #flowchartContainer {
             flex-grow: 1;
             border: 1px solid black;
+            position: relative;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
@@ -23,58 +28,28 @@
     <button onclick="startConnectionMode()">Add Connection</button>
     <select id="savedCharts" onchange="loadFlowchart()"></select>
     <button onclick="saveFlowchart()">Save Flowchart</button>
-    <div id="flowchartContainer"></div>
+    <div id="flowchartContainer">
+        <canvas id="flowchartCanvas"></canvas>
+    </div>
     
     <script>
-        let $ = go.GraphObject.make;
-        let diagram = $(go.Diagram, "flowchartContainer", {
-            "undoManager.isEnabled": true,
-            layout: $(go.ForceDirectedLayout)
-        });
-
+        let canvas = new fabric.Canvas('flowchartCanvas', { selection: false });
         let connectingMode = false;
         let fromNode = null;
 
-        diagram.nodeTemplate = $(go.Node, "Auto",
-            { 
-                movable: true, 
-                click: (e, node) => handleNodeClick(node),
-                mouseEnter: (e, node) => { if (connectingMode) node.findObject("SHAPE").stroke = "red"; },
-                mouseLeave: (e, node) => { if (connectingMode) node.findObject("SHAPE").stroke = "black"; }
-            },
-            $(go.Shape, "RoundedRectangle", { fill: "lightblue", strokeWidth: 2, name: "SHAPE" }),
-            $(go.Panel, "Vertical",
-                { margin: 8 },
-                $(go.TextBlock, { font: "bold 14px sans-serif", editable: true, name: "TITLE" },
-                    new go.Binding("text", "title").makeTwoWay()),
-                $(go.TextBlock, { editable: true, name: "NOTES" },
-                    new go.Binding("text", "notes").makeTwoWay())
-            )
-        );
-
-        diagram.linkTemplate = $(go.Link,
-            $(go.Shape),
-            $(go.Shape, { toArrow: "Standard" })
-        );
-
         function addNode() {
-            diagram.startTransaction("add node");
-            diagram.model.addNodeData({ title: "Title", notes: "Notes" });
-            diagram.commitTransaction("add node");
-        }
-
-        function handleNodeClick(node) {
-            if (connectingMode) {
-                if (!fromNode) {
-                    fromNode = node;
-                } else {
-                    diagram.startTransaction("add link");
-                    diagram.model.addLinkData({ from: fromNode.data.key, to: node.data.key });
-                    diagram.commitTransaction("add link");
-                    fromNode = null;
-                    connectingMode = false;
-                }
-            }
+            let rect = new fabric.Rect({
+                width: 150, height: 100, fill: 'lightblue', rx: 10, ry: 10,
+                stroke: 'black', strokeWidth: 2
+            });
+            let title = new fabric.Textbox('Title', {
+                fontSize: 14, fontWeight: 'bold', width: 140, top: -30, editable: true
+            });
+            let notes = new fabric.Textbox('Notes', {
+                fontSize: 12, width: 140, top: 10, editable: true
+            });
+            let group = new fabric.Group([rect, title, notes], { left: 100, top: 100, hasControls: true });
+            canvas.add(group);
         }
 
         function startConnectionMode() {
@@ -82,10 +57,34 @@
             fromNode = null;
         }
 
+        canvas.on('mouse:down', function(event) {
+            let target = event.target;
+            if (connectingMode) {
+                if (target && target.type === 'group') {
+                    if (!fromNode) {
+                        fromNode = target;
+                    } else {
+                        let line = new fabric.Line([
+                            fromNode.left + 75, fromNode.top + 50,
+                            target.left + 75, target.top + 50
+                        ], {
+                            stroke: 'black', strokeWidth: 2, selectable: false
+                        });
+                        canvas.add(line);
+                        fromNode = null;
+                        connectingMode = false;
+                    }
+                } else {
+                    fromNode = null;
+                    connectingMode = false;
+                }
+            }
+        });
+
         function saveFlowchart() {
             let name = prompt("Enter a name for this flowchart:");
             if (!name) return;
-            localStorage.setItem(name, diagram.model.toJson());
+            localStorage.setItem(name, JSON.stringify(canvas.toJSON()));
             updateDropdown();
         }
 
@@ -93,7 +92,7 @@
             let name = document.getElementById("savedCharts").value;
             let data = localStorage.getItem(name);
             if (data) {
-                diagram.model = go.Model.fromJson(data);
+                canvas.loadFromJSON(JSON.parse(data), canvas.renderAll.bind(canvas));
             }
         }
 

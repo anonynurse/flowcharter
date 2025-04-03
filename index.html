@@ -1,97 +1,115 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flowchart Designer</title>
-    <script src="https://unpkg.com/gojs/release/go.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gojs/2.3.12/go.js"></script>
     <style>
-        #myDiagramDiv { width: 100%; height: 500px; border: 1px solid black; }
-        button, select { margin: 5px; }
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #flowchartContainer {
+            flex-grow: 1;
+            border: 1px solid black;
+        }
     </style>
 </head>
 <body>
-
     <button onclick="addNode()">Add Node</button>
-    <button onclick="saveFlowchart()">Save</button>
-    <select id="flowchartList" onchange="loadFlowchart()">
-        <option value="">Select a saved flowchart</option>
-    </select>
-    <div id="myDiagramDiv"></div>
-
+    <button onclick="startConnectionMode()">Add Connection</button>
+    <select id="savedCharts" onchange="loadFlowchart()"></select>
+    <button onclick="saveFlowchart()">Save Flowchart</button>
+    <div id="flowchartContainer"></div>
+    
     <script>
-        const $ = go.GraphObject.make;
-        const diagram = $(go.Diagram, "myDiagramDiv", {
-            "undoManager.isEnabled": true
+        let $ = go.GraphObject.make;
+        let diagram = $(go.Diagram, "flowchartContainer", {
+            "undoManager.isEnabled": true,
+            layout: $(go.ForceDirectedLayout)
         });
 
-        diagram.nodeTemplate =
-            $(go.Node, "Auto",
-                { 
-                    locationSpot: go.Spot.Center,
-                    movable: true, 
-                    deletable: false, 
-                    click: (e, node) => editNodeText(node)
-                },
-                $(go.Shape, "RoundedRectangle",
-                    { fill: "lightblue", stroke: "black" }),
-                $(go.TextBlock,
-                    { margin: 8, editable: true },
-                    new go.Binding("text", "key").makeTwoWay()
-                )
-            );
+        let connectingMode = false;
+        let fromNode = null;
 
-        diagram.linkTemplate =
-            $(go.Link,
-                { routing: go.Link.AvoidsNodes, curve: go.Link.JumpOver },
-                $(go.Shape),
-                $(go.Shape, { toArrow: "Standard" })
-            );
+        diagram.nodeTemplate = $(go.Node, "Auto",
+            { 
+                movable: true, 
+                click: (e, node) => handleNodeClick(node),
+                mouseEnter: (e, node) => { if (connectingMode) node.findObject("SHAPE").stroke = "red"; },
+                mouseLeave: (e, node) => { if (connectingMode) node.findObject("SHAPE").stroke = "black"; }
+            },
+            $(go.Shape, "RoundedRectangle", { fill: "lightblue", strokeWidth: 2, name: "SHAPE" }),
+            $(go.Panel, "Vertical",
+                { margin: 8 },
+                $(go.TextBlock, { font: "bold 14px sans-serif", editable: true, name: "TITLE" },
+                    new go.Binding("text", "title").makeTwoWay()),
+                $(go.TextBlock, { editable: true, name: "NOTES" },
+                    new go.Binding("text", "notes").makeTwoWay())
+            )
+        );
+
+        diagram.linkTemplate = $(go.Link,
+            $(go.Shape),
+            $(go.Shape, { toArrow: "Standard" })
+        );
 
         function addNode() {
-            const key = "Node " + (diagram.model.nodeDataArray.length + 1);
             diagram.startTransaction("add node");
-            diagram.model.addNodeData({ key });
+            diagram.model.addNodeData({ title: "Title", notes: "Notes" });
             diagram.commitTransaction("add node");
         }
 
-        function editNodeText(node) {
-            const textBlock = node.findObject("TEXT");
-            diagram.commandHandler.editTextBlock(textBlock);
-        }
-
-        function saveFlowchart() {
-            const name = prompt("Enter a name for the flowchart:");
-            if (!name) return;
-
-            const json = diagram.model.toJson();
-            localStorage.setItem(name, json);
-            updateFlowchartList();
-        }
-
-        function loadFlowchart() {
-            const name = document.getElementById("flowchartList").value;
-            if (name) {
-                const json = localStorage.getItem(name);
-                diagram.model = go.Model.fromJson(json);
+        function handleNodeClick(node) {
+            if (connectingMode) {
+                if (!fromNode) {
+                    fromNode = node;
+                } else {
+                    diagram.startTransaction("add link");
+                    diagram.model.addLinkData({ from: fromNode.data.key, to: node.data.key });
+                    diagram.commitTransaction("add link");
+                    fromNode = null;
+                    connectingMode = false;
+                }
             }
         }
 
-        function updateFlowchartList() {
-            const select = document.getElementById("flowchartList");
-            select.innerHTML = '<option value="">Select a saved flowchart</option>';
-            Object.keys(localStorage).forEach(name => {
-                const option = document.createElement("option");
-                option.value = name;
-                option.textContent = name;
-                select.appendChild(option);
-            });
+        function startConnectionMode() {
+            connectingMode = true;
+            fromNode = null;
         }
 
-        updateFlowchartList();
-    </script>
+        function saveFlowchart() {
+            let name = prompt("Enter a name for this flowchart:");
+            if (!name) return;
+            localStorage.setItem(name, diagram.model.toJson());
+            updateDropdown();
+        }
 
+        function loadFlowchart() {
+            let name = document.getElementById("savedCharts").value;
+            let data = localStorage.getItem(name);
+            if (data) {
+                diagram.model = go.Model.fromJson(data);
+            }
+        }
+
+        function updateDropdown() {
+            let dropdown = document.getElementById("savedCharts");
+            dropdown.innerHTML = "";
+            for (let i = 0; i < localStorage.length; i++) {
+                let key = localStorage.key(i);
+                let option = document.createElement("option");
+                option.value = key;
+                option.textContent = key;
+                dropdown.appendChild(option);
+            }
+        }
+
+        updateDropdown();
+    </script>
 </body>
 </html>
-

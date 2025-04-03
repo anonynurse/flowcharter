@@ -2,20 +2,78 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Flowchart Maker</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flowchart Designer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gojs/2.3.12/go.js"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #flowchartContainer {
+            flex-grow: 1;
+            border: 1px solid black;
+        }
+    </style>
 </head>
 <body>
-    <div id="controls">
-        <button onclick="addNode()">Add Node</button>
-        <select id="savedFlowcharts" onchange="loadFlowchart()">
-            <option value="">Select a flowchart</option>
-        </select>
-        <button onclick="saveFlowchart()">Save Flowchart</button>
-    </div>
-    <div id="canvas"></div>
+    <select id="savedCharts" onchange="loadFlowchart()"></select>
+    <button onclick="saveFlowchart()">Save Flowchart</button>
+    <div id="flowchartContainer"></div>
+    
+    <script>
+        let $ = go.GraphObject.make;
+        let diagram = $(go.Diagram, "flowchartContainer", {
+            "undoManager.isEnabled": true,
+            layout: $(go.ForceDirectedLayout)
+        });
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsPlumb/2.15.6/js/jsplumb.min.js"></script>
-    <script src="script.js"></script>
+        diagram.nodeTemplate = $(go.Node, "Auto",
+            { movable: true },
+            $(go.Shape, "Ellipse", { fill: "lightblue", strokeWidth: 2 }),
+            $(go.Panel, "Table",
+                $(go.TextBlock, { margin: 5, row: 0, font: "bold 14px sans-serif" },
+                    new go.Binding("text", "title")),
+                $(go.TextBlock, { margin: 5, row: 1 },
+                    new go.Binding("text", "notes"))
+            )
+        );
+
+        diagram.linkTemplate = $(go.Link,
+            $(go.Shape),
+            $(go.Shape, { toArrow: "Standard" })
+        );
+
+        function saveFlowchart() {
+            let name = prompt("Enter a name for this flowchart:");
+            if (!name) return;
+            localStorage.setItem(name, diagram.model.toJson());
+            updateDropdown();
+        }
+
+        function loadFlowchart() {
+            let name = document.getElementById("savedCharts").value;
+            let data = localStorage.getItem(name);
+            if (data) {
+                diagram.model = go.Model.fromJson(data);
+            }
+        }
+
+        function updateDropdown() {
+            let dropdown = document.getElementById("savedCharts");
+            dropdown.innerHTML = "";
+            for (let i = 0; i < localStorage.length; i++) {
+                let key = localStorage.key(i);
+                let option = document.createElement("option");
+                option.value = key;
+                option.textContent = key;
+                dropdown.appendChild(option);
+            }
+        }
+
+        updateDropdown();
+    </script>
 </body>
 </html>
